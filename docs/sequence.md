@@ -8,7 +8,7 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant Gateway as Внешний Платежный Шлюз
 
-    rect rgba(75, 75, 75, 1)
+    rect rgba(32, 30, 37, 1)
     note over Client, Gateway: ЭТАП 1: Инициализация платежа (Sync)
     Client->>GW: POST /api/v1/payments (JWT, X-Idempotency-Key)
 	GW->>GW: Валидация JWT токена
@@ -21,7 +21,6 @@ sequenceDiagram
             API-->>Client: 403 Forbidden / 401 Unauthorized
         else Валидация успешна
 
-    %% rect rgba(49, 49, 49, 1)
         API->>Cache: GET idempotency:{uuid} (Проверка готового кэша)
         alt 1. Платеж уже был создан ранее (Кэш найден)
             Cache-->>API: payment_id
@@ -53,7 +52,7 @@ sequenceDiagram
     end
     end
 
-    rect rgba(47, 47, 47, 1)
+    rect rgba(39, 39, 39, 1)
     note over Client, Gateway: ЭТАП 2: Оплата юзером (Async)
     Client->>Gateway: Переход по redirect_url и произведение оплаты
     Gateway-->>Client: Платеж успешно проведен
