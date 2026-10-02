@@ -1,0 +1,189 @@
+openapi: 3.0.3
+info:
+  title: Payment Gateway Processing Service API
+  description: Спецификация REST API сервиса обработки платежей и интеграции с внешними эквайрингами.
+  version: 1.0.0
+  contact:
+    email: alex.gromov2@mail.ru
+    name: Tihon
+    url: t.me/stesnyashka
+  license:
+    name: MIT
+servers:
+  - url: http://localhost:8080/api/v1
+tags:
+  - name: Payments
+    description: Управление платежами
+security:
+  - BearerAuth: []
+paths:
+  /payments:
+    post:
+      tags:
+        - Payments
+      summary: Creates a new payment
+      description: The idempotent payment initialization endpoint. Requires the transmission of the X-Idempotency-Key.
+      parameters:
+        - in: header
+          name: X-Idempotency-Key
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentRequest'
+      responses:
+        '200':
+          description: Повторный идемпотентный запрос. Возвращены данные ранее созданного платежа.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '201':
+          description: Платеж успешно создан и направлен в обработку
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          description: Ошибка валидации входных данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Конфликт идемпотентности (запрос с таким Key уже обработан с другими параметрами)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Ошибка взаимодействия с внешним платежным шлюзом
+
+  /payments/{payment_id}:
+    get:
+      summary: Find the payment
+      tags:
+        - Payments
+      parameters:
+        - in: path
+          name: payment_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Информация о платеже
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '404':
+          description: Платеж не найден
+
+  /payments/webhook:
+    post:
+      summary: Callback от внешнего платежного шлюза
+      description: Эндпоинт для асинхронного обновления статуса транзакции платежным шлюзом
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event_type, external_provider_id, status, signature]
+              properties:
+                event_type:
+                  type: string
+                  example: "payment.succeeded"
+                external_provider_id:
+                  type: string
+                  example: "ch_3M2eDv2eZvKYlo2C01234567"
+                status:
+                  type: string
+                  enum: [SUCCESS, FAILED]
+                signature:
+                  type: string
+                  example: "f8d39c01a..."
+      responses:
+        '200':
+          description: Сообщение принято
+        '400':
+          description: Неверный формат события
+
+components:
+
+  securitySchemes:
+    BearerAuth:
+      scheme: bearer
+      type: http
+      bearerFormat: JWT
+  schemas:
+    CreatePaymentRequest:
+      type: object
+      required:
+        - user_id
+        - amount
+        - currency
+        - payment_method
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          example: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+        amount:
+          type: number
+          format: decimal
+          minimum: 0.01
+          example: 1500.50
+        currency:
+          type: string
+          enum: [RUB]
+          example: "RUB"
+        payment_method:
+          type: string
+          enum: [CARD, SBP]
+          example: "CARD"
+
+    PaymentResponse:
+      type: object
+      properties:
+        payment_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING, PROCESSING, SUCCESS, FAILED, CANCELLED]
+          example: "PROCESSING"
+        amount:
+          type: number
+          example: 1500.50
+        currency:
+          type: string
+          example: "RUB"
+        redirect_url:
+          type: string
+          example: "https://pay.gateway.com/checkout/39201"
+        created_at:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "INVALID_AMOUNT"
+        message:
+          type: string
+          example: "Сумма платежа должна быть больше 0"
+        timestamp:
+          type: string
+          format: date-time
+
